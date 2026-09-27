@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Multi-VM Hardware Dual-Attestation & Plain vTPM Integration Test
+# Multi-VM vTPM Remote Attestation & SVID Integration Test
 # ==============================================================================
 set -e
 
@@ -15,23 +15,23 @@ INSPECT_MODE=false
 
 for arg in "$@"; do
     case "$arg" in
-        --inspect|-i|--keep-open|--interactive)
-            INSPECT_MODE=true
-            ;;
-        --help|-h)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --inspect, -i, --keep-open   Launch each guest VM in a separate terminal window and keep them open for live inspection."
-            echo "                               By default, VMs run in the background and terminate automatically at test end."
-            echo "  --help, -h                   Show this help message."
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $arg"
-            echo "Usage: $0 [--inspect|-i|--keep-open] [--help|-h]"
-            exit 1
-            ;;
+    --inspect | -i | --keep-open | --interactive)
+        INSPECT_MODE=true
+        ;;
+    --help | -h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --inspect, -i, --keep-open   Launch each guest VM in a separate terminal window and keep them open for live inspection."
+        echo "                               By default, VMs run in the background and terminate automatically at test end."
+        echo "  --help, -h                   Show this help message."
+        exit 0
+        ;;
+    *)
+        echo "Unknown option: $arg"
+        echo "Usage: $0 [--inspect|-i|--keep-open] [--help|-h]"
+        exit 1
+        ;;
     esac
 done
 
@@ -108,7 +108,7 @@ append_log_section() {
         echo ""
         echo "$clean_content"
         echo ""
-    } >> "$FULL_LOG_FILE"
+    } >>"$FULL_LOG_FILE"
 }
 
 # Helper to open full log file in Mousepad (or graphical editor fallback)
@@ -156,6 +156,14 @@ launch_vm_terminal() {
 # ==============================================================================
 echo "=> 1. Building the Rust & Go workspace binaries..."
 mkdir -p "$WORKSPACE_DIR/target/release"
+
+# If invoked via sudo, ensure target directory and its contents are owned by SUDO_USER
+# so non-root build commands can acquire locks, write build artifacts, and create symlinks.
+if [ -n "$SUDO_USER" ]; then
+    chown -R "$SUDO_USER:$(id -gn "$SUDO_USER" 2>/dev/null || echo users)" "$WORKSPACE_DIR/target"
+    chmod -R u+rwX "$WORKSPACE_DIR/target"
+fi
+
 BUILD_OUT=""
 if [ -n "$SUDO_USER" ]; then
     BUILD_OUT=$(
@@ -172,15 +180,24 @@ else
 fi
 append_log_section "Workspace Binaries Build" "$BUILD_OUT"
 
+# Verify all required workspace binaries were successfully created
+for bin in hyper-svid-server hyper-svid-agent check-svid-rust check-svid-go grpc-app-go workload-test-workload; do
+    if [ ! -f "$WORKSPACE_DIR/target/release/$bin" ]; then
+        echo "ERROR: Failed to build $bin! Check $FULL_LOG_FILE or output below:" >&2
+        echo "$BUILD_OUT" >&2
+        exit 1
+    fi
+done
+
 # ==============================================================================
 # SECTION 2: Setup Test Environment & Host CA Configuration
 # ==============================================================================
 echo "=> 2. Setting up test host configuration & state directories..."
-pkill -f "authn-scope-server.*test-host.json" 2>/dev/null || true
+pkill -f "hyper-svid-server.*test-host.json" 2>/dev/null || true
 pkill -f "swtpm.*host-tpm" 2>/dev/null || true
 pkill -f "swtpm.*swtpm-vm" 2>/dev/null || true
 sleep 0.5
-rm -f "$WORKSPACE_DIR"/vm-*.qcow2 "$WORKSPACE_DIR"/authn-scope*.qcow2
+rm -f "$WORKSPACE_DIR"/vm-*.qcow2 "$WORKSPACE_DIR"/hyper-svid*.qcow2
 cd "$WORKSPACE_DIR"
 
 cat <<JSON >"$TEST_RESULT_DIR/temp/test-host.json"
@@ -188,9 +205,9 @@ cat <<JSON >"$TEST_RESULT_DIR/temp/test-host.json"
   "trust_domain": "example.org",
   "ca_cert_path": "$TEST_RESULT_DIR/ca-cert.pem",
   "ca_key_path": "$TEST_RESULT_DIR/ca-key.pem",
-  "transport": "tcp",
-  "server_port": 9000,
-  "listen_addr": "0.0.0.0:9000",
+  "server_port": 900,
+  "peer_port": 901,
+  "notification_port": 902,
   "vms": {
     "vm-1": {
       "vm_cid": 3,
@@ -238,7 +255,7 @@ cat <<JSON >"$TEST_RESULT_DIR/temp/test-host.json"
 }
 JSON
 
-export AUTHN_SCOPE_STATE_DIR="$TEST_RESULT_DIR/state"
+export HYPER_SVID_STATE_DIR="$TEST_RESULT_DIR/state"
 append_log_section "Test Host Configuration (test-host.json)" "$(cat "$TEST_RESULT_DIR/temp/test-host.json")"
 
 # ==============================================================================
@@ -267,17 +284,17 @@ append_log_section "Host TPM Emulator Startup" "Swtpm started on tcp:2321/2322 (
 # SECTION 4: Start Host CA Server
 # ==============================================================================
 echo "=> 4. Starting host CA server in background..."
-NO_COLOR=1 RUST_LOG_STYLE=never ./target/release/authn-scope-server --config "$TEST_RESULT_DIR/temp/test-host.json" --genkey >"$TEST_RESULT_DIR/logs/server.log" 2>&1 &
+NO_COLOR=1 RUST_LOG_STYLE=never ./target/release/hyper-svid-server --config "$TEST_RESULT_DIR/temp/test-host.json" --genkey >"$TEST_RESULT_DIR/logs/server.log" 2>&1 &
 SERVER_PID=$!
 
 sleep 2
 if ! kill -0 $SERVER_PID 2>/dev/null; then
-    echo "ERROR: authn-scope-server failed to start on port 9000!"
+    echo "ERROR: hyper-svid-server failed to start on vsock port 900!"
     cat "$TEST_RESULT_DIR/logs/server.log"
     exit 1
 fi
 chmod -R 777 "$TEST_RESULT_DIR" 2>/dev/null || true
-append_log_section "Host CA Server Startup" "authn-scope-server launched on port:9000 (PID: $SERVER_PID)"
+append_log_section "Host CA Server Startup" "hyper-svid-server launched on vsock port 900 (PID: $SERVER_PID)"
 
 # ==============================================================================
 # SECTION 5: Plain vTPM Startup
@@ -301,7 +318,7 @@ start_plain_vtpm() {
         --flags not-need-init >"$TEST_RESULT_DIR/logs/swtpm-${vm_id}.log" 2>&1 &
     sleep 0.5
     chmod 777 "$socket_path" 2>/dev/null || true
-    
+
     VTPM_LOG="${VTPM_LOG}${vm_id} plain vTPM started on socket ${socket_path}\n"
 }
 
@@ -318,20 +335,32 @@ append_log_section "Plain vTPM Setup" "$VTPM_LOG"
 # ==============================================================================
 echo "=> 6. Building NixOS Guest VMs (VM-1 and VM-2)..."
 rm -f target/result-vm1 target/result-vm2
+
+if [ -n "$SUDO_USER" ]; then
+    chown -R "$SUDO_USER:$(id -gn "$SUDO_USER" 2>/dev/null || echo users)" "$WORKSPACE_DIR/target"
+    chmod -R u+rwX "$WORKSPACE_DIR/target"
+fi
+
 NIX_BUILD_LOG=""
 if [ -n "$SUDO_USER" ]; then
     NIX_BUILD_LOG=$(
-        sudo -u "$SUDO_USER" nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm1.nix -o target/result-vm1 #2>&1
-        sudo -u "$SUDO_USER" nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm2.nix -o target/result-vm2 #2>&1
+        sudo -u "$SUDO_USER" nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm1.nix -o target/result-vm1 2>&1
+        sudo -u "$SUDO_USER" nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm2.nix -o target/result-vm2 2>&1
     )
 else
     NIX_BUILD_LOG=$(
-        nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm1.nix -o target/result-vm1 #2>&1
-        nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm2.nix -o target/result-vm2 #2>&1
+        nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm1.nix -o target/result-vm1 2>&1
+        nix-build '<nixpkgs/nixos>' -A vm -I nixos-config=nix/checks/agent-vm2.nix -o target/result-vm2 2>&1
     )
 fi
 rm -f "$TEST_RESULT_DIR/vm1-result-summary" "$TEST_RESULT_DIR/vm2-result-summary"
 append_log_section "NixOS Guest VMs Build" "$NIX_BUILD_LOG"
+
+if [ ! -e target/result-vm1 ] || [ ! -e target/result-vm2 ]; then
+    echo "ERROR: Failed to build NixOS guest VMs! Check $FULL_LOG_FILE or output below:" >&2
+    echo "$NIX_BUILD_LOG" >&2
+    exit 1
+fi
 
 # ==============================================================================
 # SECTION 7: Launch Guest VMs Concurrently
@@ -356,7 +385,7 @@ export QEMU_KERNEL_PARAMS="TERM=dumb systemd.tty.term.console=dumb systemd.tty.t
 if [ "$INSPECT_MODE" = true ] && [ "$HAS_TERMINAL" = true ]; then
     echo "=> 7. Launching Guest VM-1 and Guest VM-2 in separate terminal windows (inspect mode)..."
 
-    cat <<EOF > "$TEST_RESULT_DIR/temp/run-vm1.sh"
+    cat <<EOF >"$TEST_RESULT_DIR/temp/run-vm1.sh"
 #!/usr/bin/env bash
 export QEMU_NET_OPTS="hostfwd=tcp:0.0.0.0:50052-:50052"
 export NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm1-disk.qcow2"
@@ -366,7 +395,7 @@ export QEMU_KERNEL_PARAMS="$QEMU_KERNEL_PARAMS"
 EOF
     chmod +x "$TEST_RESULT_DIR/temp/run-vm1.sh"
 
-    cat <<EOF > "$TEST_RESULT_DIR/temp/run-vm2.sh"
+    cat <<EOF >"$TEST_RESULT_DIR/temp/run-vm2.sh"
 #!/usr/bin/env bash
 export NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm2-disk.qcow2"
 export QEMU_OPTS="-pidfile $TEST_RESULT_DIR/temp/vm2.pid"
@@ -393,10 +422,10 @@ else
     else
         echo "=> 7. Launching Guest VM-1 and Guest VM-2 concurrently in background..."
     fi
-    QEMU_NET_OPTS="hostfwd=tcp:0.0.0.0:50052-:50052" NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm1-disk.qcow2" ./target/result-vm1/bin/run-vm-1-vm < /dev/null >"$TEST_RESULT_DIR/logs/vm1.log" 2>&1 &
+    QEMU_NET_OPTS="hostfwd=tcp:0.0.0.0:50052-:50052" NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm1-disk.qcow2" ./target/result-vm1/bin/run-vm-1-vm </dev/null >"$TEST_RESULT_DIR/logs/vm1.log" 2>&1 &
     VM1_PID=$!
 
-    NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm2-disk.qcow2" ./target/result-vm2/bin/run-vm-2-vm < /dev/null >"$TEST_RESULT_DIR/logs/vm2.log" 2>&1 &
+    NIX_DISK_IMAGE="$TEST_RESULT_DIR/vm2-disk.qcow2" ./target/result-vm2/bin/run-vm-2-vm </dev/null >"$TEST_RESULT_DIR/logs/vm2.log" 2>&1 &
     VM2_PID=$!
 fi
 
@@ -409,12 +438,12 @@ echo "=> 8. Waiting for attestation & credential evaluation on both VMs (up to 1
 TIMEOUT=120
 ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
-    if [ -f "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" ] && \
-       [ -f "$TEST_RESULT_DIR/vm1-check-svid-go-summary" ] && \
-       [ -f "$TEST_RESULT_DIR/vm1-grpc-app-summary" ] && \
-       [ -f "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" ] && \
-       [ -f "$TEST_RESULT_DIR/vm2-check-svid-go-summary" ] && \
-       [ -f "$TEST_RESULT_DIR/vm2-grpc-app-summary" ]; then
+    if [ -f "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" ] &&
+        [ -f "$TEST_RESULT_DIR/vm1-check-svid-go-summary" ] &&
+        [ -f "$TEST_RESULT_DIR/vm1-grpc-app-summary" ] &&
+        [ -f "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" ] &&
+        [ -f "$TEST_RESULT_DIR/vm2-check-svid-go-summary" ] &&
+        [ -f "$TEST_RESULT_DIR/vm2-grpc-app-summary" ]; then
         echo "   ... All test service summary files detected!"
         break
     fi
@@ -429,10 +458,10 @@ done
 SERVER_LOG=$(cat "$TEST_RESULT_DIR/logs/server.log" 2>/dev/null || echo "Not found")
 append_log_section "Host CA Server Log" "$SERVER_LOG"
 
-SEAL_STATE=$( [ -f "$TEST_RESULT_DIR/state/known_vms_seal.json" ] && cat "$TEST_RESULT_DIR/state/known_vms_seal.json" || echo "Not found" )
+SEAL_STATE=$([ -f "$TEST_RESULT_DIR/state/known_vms_seal.json" ] && cat "$TEST_RESULT_DIR/state/known_vms_seal.json" || echo "Not found")
 append_log_section "Host TPM Seal State (known_vms_seal.json)" "$SEAL_STATE"
 
-TOFU_STATE=$( [ -f "$TEST_RESULT_DIR/state/known_vms.json" ] && cat "$TEST_RESULT_DIR/state/known_vms.json" || echo "Not found" )
+TOFU_STATE=$([ -f "$TEST_RESULT_DIR/state/known_vms.json" ] && cat "$TEST_RESULT_DIR/state/known_vms.json" || echo "Not found")
 append_log_section "Host TOFU Learned VMs (known_vms.json)" "$TOFU_STATE"
 
 VTPM_INFO=""
@@ -452,13 +481,13 @@ append_log_section "QEMU Guest VM-1 Boot Log" "$VM1_QEMU_LOG"
 VM2_QEMU_LOG=$(cat "$TEST_RESULT_DIR/logs/vm2.log" 2>/dev/null || echo "Not found")
 append_log_section "QEMU Guest VM-2 Boot Log" "$VM2_QEMU_LOG"
 
-VM1_RUST_OK=$( [ -f "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" ] && cat "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" || echo "FAIL" )
-VM1_GO_OK=$( [ -f "$TEST_RESULT_DIR/vm1-check-svid-go-summary" ] && cat "$TEST_RESULT_DIR/vm1-check-svid-go-summary" || echo "FAIL" )
-VM1_GRPC_OK=$( [ -f "$TEST_RESULT_DIR/vm1-grpc-app-summary" ] && cat "$TEST_RESULT_DIR/vm1-grpc-app-summary" || echo "FAIL" )
+VM1_RUST_OK=$([ -f "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" ] && cat "$TEST_RESULT_DIR/vm1-check-svid-rust-summary" || echo "FAIL")
+VM1_GO_OK=$([ -f "$TEST_RESULT_DIR/vm1-check-svid-go-summary" ] && cat "$TEST_RESULT_DIR/vm1-check-svid-go-summary" || echo "FAIL")
+VM1_GRPC_OK=$([ -f "$TEST_RESULT_DIR/vm1-grpc-app-summary" ] && cat "$TEST_RESULT_DIR/vm1-grpc-app-summary" || echo "FAIL")
 
-VM2_RUST_OK=$( [ -f "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" ] && cat "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" || echo "FAIL" )
-VM2_GO_OK=$( [ -f "$TEST_RESULT_DIR/vm2-check-svid-go-summary" ] && cat "$TEST_RESULT_DIR/vm2-check-svid-go-summary" || echo "FAIL" )
-VM2_GRPC_OK=$( [ -f "$TEST_RESULT_DIR/vm2-grpc-app-summary" ] && cat "$TEST_RESULT_DIR/vm2-grpc-app-summary" || echo "FAIL" )
+VM2_RUST_OK=$([ -f "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" ] && cat "$TEST_RESULT_DIR/vm2-check-svid-rust-summary" || echo "FAIL")
+VM2_GO_OK=$([ -f "$TEST_RESULT_DIR/vm2-check-svid-go-summary" ] && cat "$TEST_RESULT_DIR/vm2-check-svid-go-summary" || echo "FAIL")
+VM2_GRPC_OK=$([ -f "$TEST_RESULT_DIR/vm2-grpc-app-summary" ] && cat "$TEST_RESULT_DIR/vm2-grpc-app-summary" || echo "FAIL")
 
 VM1_RUST_LOG=$(cat "$TEST_RESULT_DIR/vm1-check-svid-rust.log" 2>/dev/null || echo "Not found")
 VM1_GO_LOG=$(cat "$TEST_RESULT_DIR/vm1-check-svid-go.log" 2>/dev/null || echo "Not found")
@@ -542,7 +571,7 @@ fi
 # Automatically launch Mousepad to display the structured full log file
 if [ "$INSPECT_MODE" = true ]; then
     open_log_in_editor "$FULL_LOG_FILE"
-fi    
+fi
 
 if [ "$VM1_OK" = true ] && [ "$VM2_OK" = true ]; then
     echo "======================================================"

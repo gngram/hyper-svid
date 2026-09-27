@@ -1,6 +1,6 @@
 {
-  "ca_cert_path": "/etc/authn-scope/ca/ca-cert.pem",
-  "ca_key_path": "/etc/authn-scope/ca/ca-key.pem",
+  "ca_cert_path": "/etc/hyper-svid/ca/ca-cert.pem",
+  "ca_key_path": "/etc/hyper-svid/ca/ca-key.pem",
   "server_port": 900,
   "peer_port": 901,
   "vms": {

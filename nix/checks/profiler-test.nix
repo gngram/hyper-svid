@@ -1,13 +1,13 @@
 {
   pkgs,
-  authScope,
+  hyperSvid,
 }: let
   testModule = {lib, ...}: {
-    environment.systemPackages = [authScope];
+    environment.systemPackages = [hyperSvid];
   };
 in
   pkgs.testers.runNixOSTest {
-    name = "authn-scope-profiler-test";
+    name = "hyper-svid-profiler-test";
     nodes.machine = testModule;
 
     testScript = ''

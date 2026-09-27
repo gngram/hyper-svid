@@ -1,5 +1,5 @@
-use authn_scope_ca::CertificateAuthority;
-use authn_scope_ca::signing::SigningRequest;
+use hyper_svid_ca::CertificateAuthority;
+use hyper_svid_ca::signing::SigningRequest;
 use std::path::Path;
 use std::time::Instant;
 
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 2b. CA Signing
         let start_signing = Instant::now();
-        let _cert_pem = authn_scope_ca::signing::sign_csr(
+        let _cert_pem = hyper_svid_ca::signing::sign_csr(
             &ca,
             SigningRequest {
                 csr_pem: &csr_pem,
@@ -196,7 +196,7 @@ hZLzB6i9djLqaVXisgWhySZDHbEzbTCOOxP9EbvUXWwkTd0vfY39FAAAvGpo2rlw\n\
     tpmt_public.extend_from_slice(&(n_slice.len() as u16).to_be_bytes());
     tpmt_public.extend_from_slice(n_slice);
 
-    let quote = authn_scope_tpm::TpmQuote {
+    let quote = hyper_svid_tpm::TpmQuote {
         attest_bytes,
         signature_bytes: sig_bytes,
     };
@@ -204,7 +204,7 @@ hZLzB6i9djLqaVXisgWhySZDHbEzbTCOOxP9EbvUXWwkTd0vfY39FAAAvGpo2rlw\n\
     let mut quote_verify_durations = Vec::new();
     for _ in 0..iterations {
         let start_verify = Instant::now();
-        let verified_digest = authn_scope_tpm::verify_quote(&tpmt_public, &nonce, &quote)?;
+        let verified_digest = hyper_svid_tpm::verify_quote(&tpmt_public, &nonce, &quote)?;
         quote_verify_durations.push(start_verify.elapsed());
         assert_eq!(verified_digest, mock_pcr_digest);
     }

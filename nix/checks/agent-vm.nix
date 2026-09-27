@@ -8,8 +8,8 @@
   pkgs,
   ...
 }: let
-  authScope = pkgs.callPackage ../pkgs/authn-scope-rust.nix {};
-  authScopeGo = pkgs.callPackage ../pkgs/authn-scope-go.nix {};
+  hyperSvid = pkgs.callPackage ../pkgs/hyper-svid-rust.nix {};
+  hyperSvidGo = pkgs.callPackage ../pkgs/hyper-svid-go.nix {};
 
   evalTestScript = pkgs.writeShellScript "run-eval-test" ''
     set -e
@@ -21,28 +21,28 @@
     # Wait up to 30 s for the Workload API socket to appear
     echo "==> Waiting for Workload API socket..."
     for i in $(seq 1 30); do
-      [ -S /run/authn-scope/workload.sock ] && break
+      [ -S /run/hyper-svid/workload.sock ] && break
       sleep 1
     done
-    [ -S /run/authn-scope/workload.sock ] || { echo "Workload socket never appeared"; exit 1; }
+    [ -S /run/hyper-svid/workload.sock ] || { echo "Workload socket never appeared"; exit 1; }
 
     echo "==> Fetching credentials via Workload API (as service-a)..."
     # Use runuser (no PAM) to switch to service-a so the UNIX selector matches.
     # workload-test-workload writes to /tmp/workload-cert-<USER>.pem
     ${pkgs.util-linux}/bin/runuser -u service-a -- env USER=service-a \
-      ${authScope}/bin/workload-test-workload /run/authn-scope/workload.sock
+      ${hyperSvid}/bin/workload-test-workload /run/hyper-svid/workload.sock
 
     # Copy the issued cert to the shared workspace for inspection
     cp /tmp/workload-cert-service-a.pem /workspace/test-result/service-a-cert.pem
     cp /tmp/workload-ca-service-a.pem   /workspace/test-result/ca-cert.pem
 
     echo "==> Evaluating certificate (Rust)..."
-    ${authScope}/bin/authn-scope-eval-test \
+    ${hyperSvid}/bin/check-svid-rust \
       /workspace/test-result/service-a-cert.pem \
       /workspace/test-result/ca-cert.pem
 
     echo "==> Evaluating certificate (Go)..."
-    ${authScopeGo}/bin/authn-scope-eval-test-go \
+    ${hyperSvidGo}/bin/check-svid-go \
       /workspace/test-result/service-a-cert.pem \
       /workspace/test-result/ca-cert.pem
 
@@ -52,11 +52,11 @@
   '';
 in {
   imports = [
-    ../modules/authn-scope.nix
+    ../modules/hyper-svid.nix
   ];
 
   # --- Hostname ---
-  networking.hostName = "authn-scope";
+  networking.hostName = "hyper-svid";
 
   users.users.nixos = {
     isNormalUser = true;
@@ -93,28 +93,28 @@ in {
 
   # --- Workload API socket directory ---
   systemd.tmpfiles.rules = [
-    "d /run/authn-scope 0755 root root -"
+    "d /run/hyper-svid 0755 root root -"
   ];
 
   # --- Agent Configuration ---
-  services.authn-scope.agent = {
+  services.hyper-svid.agent = {
     enable = true;
-    package = authScope;
+    package = hyperSvid;
     settings = {
       vm_name = "local-vm";
       server_port = 900;
-      workload_api_socket = "/run/authn-scope/workload.sock";
+      workload_api_socket = "/run/hyper-svid/workload.sock";
     };
   };
 
   # --- Evaluator Test Service ---
   # Runs as root so it can write to /workspace and call runuser for the workload fetch.
   # On any error the ERR trap writes FAILURE and powers off the VM.
-  systemd.services.authn-scope-evaluator-test = {
-    description = "Run VM-AuthN-Scope Evaluator Test and Shutdown VM";
+  systemd.services.hyper-svid-evaluator-test = {
+    description = "Run Hyper-SVID Evaluator Test and Shutdown VM";
     wantedBy = ["multi-user.target"];
-    after = ["authn-scope-agent.service" "network.target"];
-    requires = ["authn-scope-agent.service"];
+    after = ["hyper-svid-agent.service" "network.target"];
+    requires = ["hyper-svid-agent.service"];
     serviceConfig = {
       Type = "oneshot";
       User = "root";

@@ -1,4 +1,4 @@
-# VM-AuthN-Scope: vsock Certificate Authority & Workload API — Design Document
+# Hyper-SVID: vsock Certificate Authority & Workload API — Design Document
 
 ## Overview
 
@@ -63,7 +63,7 @@ Each **guest VM** runs an agent that authenticates with the host CA and exposes 
 ![Certificate Issuance and Automatic Dynamic Rotation Flow Sequence Diagram](images/cert_issuance_rotation_flow.jpg)
 
 #### Technical Breakdown:
-1. **Process Selector Inspection**: Local process connects to UDS `/run/authn-scope/workload.sock`. Guest agent validates caller process credentials via `SO_PEERCRED`, `/proc/<pid>/exe`, and `/proc/<pid>/cgroup`.
+1. **Process Selector Inspection**: Local process connects to UDS `/run/hyper-svid/workload.sock`. Guest agent validates caller process credentials via `SO_PEERCRED`, `/proc/<pid>/exe`, and `/proc/<pid>/cgroup`.
 2. **CSR & Issuance**: Agent generates an in-memory ECDSA P-256 keypair, submits PKCS#10 CSR to host CA over vsock port 901, and returns leaf X.509 certificate.
 3. **Production Dynamic TLS Callbacks**: Workload process starts background `StartRotationLoop(5s)` and uses `GetClientCertificate` (Go) / dynamic cert resolver (Rust) to hot-swap updated certificates in RAM at 50% TTL threshold without application restarts or connection re-dials.
 
@@ -186,12 +186,12 @@ A length-prefixed JSON protocol over the vsock channel:
 
 ## Configuration Schema
 
-### Host config (`/etc/authn-scope/host.json`)
+### Host config (`/etc/hyper-svid/host.json`)
 
 ```json
 {
-  "ca_cert_path": "/etc/authn-scope/ca/ca-cert.pem",
-  "ca_key_path": "/etc/authn-scope/ca/ca-key.pem",
+  "ca_cert_path": "/etc/hyper-svid/ca/ca-cert.pem",
+  "ca_key_path": "/etc/hyper-svid/ca/ca-key.pem",
   "server_port": 900,
   "peer_port": 901,
   "vms": {
@@ -216,14 +216,14 @@ A length-prefixed JSON protocol over the vsock channel:
 }
 ```
 
-### Guest/Agent config (`/etc/authn-scope/agent.json`)
+### Guest/Agent config (`/etc/hyper-svid/agent.json`)
 
 ```json
 {
   "vm_name": "local-vm",
   "server_port": 900,
   "client_port": 901,
-  "workload_api_socket": "/run/authn-scope/workload.sock"
+  "workload_api_socket": "/run/hyper-svid/workload.sock"
 }
 ```
 
@@ -245,7 +245,7 @@ A length-prefixed JSON protocol over the vsock channel:
 ## File & Module Layout
 
 ```
-authn-scope/
+hyper-svid/
 ├── Cargo.toml               # workspace root
 ├── Cargo.lock
 │
@@ -255,14 +255,14 @@ authn-scope/
 │
 ├── libs/
 │   ├── rust-libs/
-│   │   ├── authn-scope-proto/     # wire types, framing codecs, protocol versions
-│   │   ├── authn-scope-ca/        # pure-Rust CA engine, CSR signing
-│   │   ├── authn-scope-tpm/       # TPM 2.0 AK management, quote verification, sealing
-│   │   ├── authn-scope-workload/  # Rust client library for Workload API
-│   │   └── authn-scope-evaluator/ # certificate verification library
+│   │   ├── hyper-svid-proto/     # wire types, framing codecs, protocol versions
+│   │   ├── hyper-svid-ca/        # pure-Rust CA engine, CSR signing
+│   │   ├── hyper-svid-tpm/       # TPM 2.0 AK management, quote verification, sealing
+│   │   ├── hyper-svid-workload/  # Rust client library for Workload API
+│   │   └── hyper-svid-evaluator/ # certificate verification library
 │   └── go-libs/
-│       ├── authn-scope-workload/  # Go client library for Workload API
-│       └── authn-scope-evaluator/ # Go certificate verification library
+│       ├── hyper-svid-workload/  # Go client library for Workload API
+│       └── hyper-svid-evaluator/ # Go certificate verification library
 │
 ├── testapp/
 │   ├── proto/                     # shared echo.proto gRPC service definition
@@ -271,8 +271,8 @@ authn-scope/
 │
 └── apps/
     └── rust-apps/
-        ├── authn-scope-server/        # host CA daemon with TPM sealing & attestation
-        ├── authn-scope-agent/         # guest agent with Workload API & vTPM quote
+        ├── hyper-svid-server/        # host CA daemon with TPM sealing & attestation
+        ├── hyper-svid-agent/         # guest agent with Workload API & vTPM quote
         ├── workload-test-workload/    # test workload for rotation verification
         └── profiler/                  # memory and latency profiling benchmark
 ```

@@ -57,7 +57,8 @@ impl EchoService for MyEchoService {
         );
         log_msg!(
             "[Rust App] Received gRPC message from '{}': {}",
-            peer_cn, req_msg.message
+            peer_cn,
+            req_msg.message
         );
 
         Ok(tonic::Response::new(EchoResponse {
@@ -87,7 +88,9 @@ fn der_to_pem(tag: &str, der: &[u8]) -> String {
 }
 
 fn creds_from_source(source: &spiffe::X509Source) -> Result<X509Credentials> {
-    let svid = source.svid().context("Failed to get SVID from X509Source")?;
+    let svid = source
+        .svid()
+        .context("Failed to get SVID from X509Source")?;
     let mut cert_pem = String::new();
     for cert in svid.cert_chain() {
         cert_pem.push_str(&der_to_pem("CERTIFICATE", cert.as_bytes()));
@@ -95,7 +98,9 @@ fn creds_from_source(source: &spiffe::X509Source) -> Result<X509Credentials> {
     let key_pem = der_to_pem("PRIVATE KEY", svid.private_key().as_bytes());
 
     let trust_domain = svid.spiffe_id().trust_domain();
-    let bundle_set = source.bundle_set().context("Failed to get bundle set from X509Source")?;
+    let bundle_set = source
+        .bundle_set()
+        .context("Failed to get bundle set from X509Source")?;
     let mut ca_cert_pem = String::new();
     if let Some(bundle) = bundle_set.get(trust_domain) {
         for authority in bundle.authorities() {
@@ -133,14 +138,17 @@ async fn create_x509_source_retry(socket_path: &str) -> Result<spiffe::X509Sourc
             Ok(source) => {
                 log_msg!(
                     "[Rust App] Established connection to SPIFFE Workload API UDS socket at '{}' via official SPIFFE SDK on attempt {}",
-                    endpoint_str, i
+                    endpoint_str,
+                    i
                 );
                 return Ok(source);
             }
             Err(e) => {
                 log_msg!(
                     "[Rust App] [ATTEMPT {}/60] Connecting to SPIFFE Workload API UDS at '{}' failed: {:?}",
-                    i, endpoint_str, e
+                    i,
+                    endpoint_str,
+                    e
                 );
                 last_err = Some(e);
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -153,7 +161,6 @@ async fn create_x509_source_retry(socket_path: &str) -> Result<spiffe::X509Sourc
     );
 }
 
-
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -163,11 +170,12 @@ async fn main() -> Result<()> {
     let socket_path = args
         .get(3)
         .map(|s| s.as_str())
-        .unwrap_or("/run/authn-scope/workload.sock");
+        .unwrap_or("/run/hyper-svid/workload.sock");
 
     log_msg!(
         "[Rust App] Starting gRPC test app using official SPIFFE SDK X509Source in mode '{}' at {}",
-        mode, addr
+        mode,
+        addr
     );
 
     let source = create_x509_source_retry(socket_path).await?;
@@ -176,7 +184,10 @@ async fn main() -> Result<()> {
 
     log_msg!(
         "[Rust App] Initial credentials loaded via SPIFFE X509Source. SPIFFE ID='{}', CN='{}', NotBefore={}, NotAfter={}",
-        creds1.spiffe_id, cn1, not_before1, not_after1
+        creds1.spiffe_id,
+        cn1,
+        not_before1,
+        not_after1
     );
 
     if mode == "server" {
@@ -250,7 +261,9 @@ async fn run_server(
 
     log_msg!(
         "[Rust App] Separate assertion fetch complete. CN='{}', NotBefore={}, NotAfter={}",
-        cn2, not_before2, not_after2
+        cn2,
+        not_before2,
+        not_after2
     );
 
     if not_before2 <= initial_not_before {
@@ -292,7 +305,8 @@ async fn run_client(
             .identity(identity)
             .ca_certificate(cert);
 
-        let endpoint = Endpoint::from_shared(format!("https://{}", addr))?.tls_config(tls_config)?;
+        let endpoint =
+            Endpoint::from_shared(format!("https://{}", addr))?.tls_config(tls_config)?;
 
         if let Ok(c) = EchoServiceClient::connect(endpoint).await {
             client1 = Some(c);
@@ -318,10 +332,7 @@ async fn run_client(
         "[Rust App] Extracted peer name from certificate: '{}'",
         response1.peer_identity
     );
-    log_msg!(
-        "[Rust App] Received gRPC response: {}",
-        response1.message
-    );
+    log_msg!("[Rust App] Received gRPC response: {}", response1.message);
 
     log_msg!("[Rust App] Waiting 32 seconds for automatic certificate rotation threshold...");
     tokio::time::sleep(Duration::from_secs(32)).await;
@@ -346,7 +357,9 @@ async fn run_client(
 
     log_msg!(
         "[Rust App] Separate assertion fetch complete. CN='{}', NotBefore={}, NotAfter={}",
-        cn2, not_before2, not_after2
+        cn2,
+        not_before2,
+        not_after2
     );
 
     if not_before2 <= initial_not_before {

@@ -183,102 +183,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "authn-scope-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "authn-scope-proto",
- "authn-scope-tpm",
- "base64",
- "clap",
- "hyper-util",
- "libc",
- "prost 0.13.5",
- "rcgen",
- "ring",
- "rustix 0.38.44",
- "rustls-pemfile",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-vsock",
- "tonic 0.12.3",
- "tracing",
- "tracing-subscriber",
- "uzers",
- "vsock",
- "x509-parser 0.16.0",
-]
-
-[[package]]
-name = "authn-scope-ca"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "rcgen",
- "ring",
- "rustls-pemfile",
- "spiffe",
- "thiserror 1.0.69",
- "time",
- "tracing",
- "x509-parser 0.16.0",
-]
-
-[[package]]
-name = "authn-scope-proto"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "prost 0.13.5",
- "serde",
- "serde_json",
- "tokio",
- "tonic 0.12.3",
- "tonic-build",
-]
-
-[[package]]
-name = "authn-scope-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "authn-scope-ca",
- "authn-scope-proto",
- "authn-scope-tpm",
- "base64",
- "clap",
- "libc",
- "rcgen",
- "ring",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-vsock",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "authn-scope-tpm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "ring",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
- "tss-esapi",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -395,8 +299,8 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 name = "check-svid-rust"
 version = "0.1.0"
 dependencies = [
- "authn-scope-ca",
- "authn-scope-proto",
+ "hyper-svid-ca",
+ "hyper-svid-proto",
  "rcgen",
  "tempfile",
  "thiserror 1.0.69",
@@ -844,6 +748,102 @@ dependencies = [
  "smallvec",
  "tokio",
  "want",
+]
+
+[[package]]
+name = "hyper-svid-agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "base64",
+ "clap",
+ "hyper-svid-proto",
+ "hyper-svid-tpm",
+ "hyper-util",
+ "libc",
+ "prost 0.13.5",
+ "rcgen",
+ "ring",
+ "rustix 0.38.44",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-vsock",
+ "tonic 0.12.3",
+ "tracing",
+ "tracing-subscriber",
+ "uzers",
+ "vsock",
+ "x509-parser 0.16.0",
+]
+
+[[package]]
+name = "hyper-svid-ca"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "rcgen",
+ "ring",
+ "rustls-pemfile",
+ "spiffe",
+ "thiserror 1.0.69",
+ "time",
+ "tracing",
+ "x509-parser 0.16.0",
+]
+
+[[package]]
+name = "hyper-svid-proto"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "prost 0.13.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic 0.12.3",
+ "tonic-build",
+]
+
+[[package]]
+name = "hyper-svid-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "hyper-svid-ca",
+ "hyper-svid-proto",
+ "hyper-svid-tpm",
+ "libc",
+ "rcgen",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-vsock",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "hyper-svid-tpm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "tss-esapi",
 ]
 
 [[package]]
@@ -1432,9 +1432,9 @@ name = "profiler"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "authn-scope-ca",
- "authn-scope-proto",
- "authn-scope-tpm",
+ "hyper-svid-ca",
+ "hyper-svid-proto",
+ "hyper-svid-tpm",
  "rcgen",
  "ring",
  "rustls-pemfile",

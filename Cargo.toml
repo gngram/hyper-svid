@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "libs/rust-libs/authn-scope-proto",
-    "libs/rust-libs/authn-scope-ca",
-    "libs/rust-libs/authn-scope-tpm",
-    "apps/rust-apps/authn-scope-server",
-    "apps/rust-apps/authn-scope-agent",
+    "libs/rust-libs/hyper-svid-proto",
+    "libs/rust-libs/hyper-svid-ca",
+    "libs/rust-libs/hyper-svid-tpm",
+    "apps/rust-apps/hyper-svid-server",
+    "apps/rust-apps/hyper-svid-agent",
     "testapp/check-svid-rust",
     "testapp/grpc-app-rust",
     "testapp/workload-test-workload",
@@ -57,6 +57,6 @@ time = "0.3"
 tss-esapi = "7.7"
 
 # Workspace-internal crates
-authn-scope-proto = { path = "libs/rust-libs/authn-scope-proto" }
-authn-scope-ca    = { path = "libs/rust-libs/authn-scope-ca" }
-authn-scope-tpm   = { path = "libs/rust-libs/authn-scope-tpm" }
+hyper-svid-proto = { path = "libs/rust-libs/hyper-svid-proto" }
+hyper-svid-ca    = { path = "libs/rust-libs/hyper-svid-ca" }
+hyper-svid-tpm   = { path = "libs/rust-libs/hyper-svid-tpm" }

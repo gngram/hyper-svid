@@ -1,5 +1,5 @@
 {
-  description = "VM-AuthN-Scope NixOS VM Test";
+  description = "Hyper-SVID NixOS VM Test";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -15,9 +15,8 @@
     system = "x86_64-linux";
     pkgs = import nixpkgs {inherit system;};
 
-    authScope = pkgs.callPackage ./nix/pkgs/authn-scope-rust.nix {};
-    authScopeGo = pkgs.callPackage ./nix/pkgs/authn-scope-go.nix {};
-    grpcAppGo = pkgs.callPackage ./nix/pkgs/grpc-app-go.nix {};
+    hyperSvid = pkgs.callPackage ./nix/pkgs/hyper-svid-rust.nix {};
+    hyperSvidGo = pkgs.callPackage ./nix/pkgs/hyper-svid-go.nix {};
 
     # Evaluate multi-language treefmt rules for this specific target system
     treefmtEval = treefmt-nix.lib.evalModule pkgs {
@@ -36,7 +35,7 @@
     # Binds configuration wrapper dynamically to standard `nix fmt` terminal call
     formatter.${system} = treefmtEval.config.build.wrapper;
 
-    nixosModules.default = ./nix/modules/authn-scope.nix;
+    nixosModules.default = ./nix/modules/hyper-svid.nix;
 
     # Pass the treefmt wrapper downstream into your development environment if required
     devShells.${system}.default = import ./nix/develop.nix {
@@ -48,18 +47,12 @@
       vm-test = import ./nix/checks/vm-test.nix {
         inherit pkgs;
         nixosModules = self.nixosModules;
-        inherit authScope authScopeGo;
-      };
-
-      tcp-dual-attestation-test = import ./nix/checks/tcp-dual-attestation-test.nix {
-        inherit pkgs;
-        nixosModules = self.nixosModules;
-        inherit authScope authScopeGo grpcAppGo;
+        inherit hyperSvid hyperSvidGo;
       };
 
       profiler-test = import ./nix/checks/profiler-test.nix {
         inherit pkgs;
-        inherit authScope;
+        inherit hyperSvid;
       };
     };
   };

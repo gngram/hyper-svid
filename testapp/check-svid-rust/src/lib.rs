@@ -1,4 +1,4 @@
-//! Evaluator for authn-scope peer certificates.
+//! Evaluator for hyper-svid peer certificates.
 
 use thiserror::Error;
 use x509_parser::parse_x509_certificate;
@@ -56,7 +56,7 @@ impl Evaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use authn_scope_ca::{
+    use hyper_svid_ca::{
         ca::CertificateAuthority,
         signing::{SigningRequest, sign_csr},
     };

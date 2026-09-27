@@ -1,12 +1,12 @@
 # Go Workload API Usage & Client Library
 
-The **Workload API** is exposed by `authn-scope-agent` via a Unix Domain Socket (default path: `/run/authn-scope/workload.sock`). Applications running inside guest VMs can fetch and automatically rotate X.509 credentials.
+The **Workload API** is exposed by `hyper-svid-agent` via a Unix Domain Socket (default path: `/run/hyper-svid/workload.sock`). Applications running inside guest VMs can fetch and automatically rotate X.509 credentials.
 
 ---
 
-## Option 1: Using the Official Go `authn-scope-workload` Package
+## Option 1: Using the Official Go `hyper-svid-workload` Package
 
-The repository includes a ready-to-use Go package at `libs/go-libs/authn-scope-workload`:
+The repository includes a ready-to-use Go package at `libs/go-libs/hyper-svid-workload`:
 
 ```go
 package main
@@ -16,11 +16,11 @@ import (
     "log"
     "time"
 
-    workload "authn-scope-workload"
+    workload "hyper-svid-workload"
 )
 
 func main() {
-    client := workload.NewWorkloadClient("/run/authn-scope/workload.sock")
+    client := workload.NewWorkloadClient("/run/hyper-svid/workload.sock")
 
     // 1. Initial synchronous fetch
     creds, err := client.FetchCredentials()
@@ -69,7 +69,7 @@ type FetchResponse struct {
 }
 
 func fetchCredentials() (*FetchResponse, error) {
-    conn, err := net.Dial("unix", "/run/authn-scope/workload.sock")
+    conn, err := net.Dial("unix", "/run/hyper-svid/workload.sock")
     if err != nil {
         return nil, err
     }
@@ -123,6 +123,6 @@ func main() {
 ---
 
 **References**
-* Go workload package – `libs/go-libs/authn-scope-workload/workload.go`
-* Go evaluator test – `libs/go-libs/authn-scope-evaluator/evaluator.go`
-* Agent implementation – `apps/rust-apps/authn-scope-agent/src/client.rs`
+* Go workload package – `libs/go-libs/hyper-svid-workload/workload.go`
+* Go evaluator test – `libs/go-libs/hyper-svid-evaluator/evaluator.go`
+* Agent implementation – `apps/rust-apps/hyper-svid-agent/src/client.rs`

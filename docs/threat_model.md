@@ -1,12 +1,12 @@
-# VM-AuthN-Scope Threat Model & Attack Analysis
+# Hyper-SVID Threat Model & Attack Analysis
 
-This document provides a comprehensive security and threat modeling analysis of the **VM-AuthN-Scope** architecture. It analyzes system assets, trust boundaries, attacker capabilities across different stages of the lifecycle (pre-boot, early-boot, runtime unprivileged, runtime root, and host-level), and formal STRIDE mitigations.
+This document provides a comprehensive security and threat modeling analysis of the **Hyper-SVID** architecture. It analyzes system assets, trust boundaries, attacker capabilities across different stages of the lifecycle (pre-boot, early-boot, runtime unprivileged, runtime root, and host-level), and formal STRIDE mitigations.
 
 ---
 
 ## 1. System Assets & Security Boundaries
 
-![VM-AuthN-Scope Threat Model Architecture](threat_model_diagram.jpg)
+![Hyper-SVID Threat Model Architecture](threat_model_diagram.jpg)
 
 ```mermaid
 flowchart TD
@@ -19,14 +19,14 @@ flowchart TD
 
     subgraph VM1["Guest VM 1 (CID 3)"]
         vTPM1["Virtual TPM (vTPM 1)<br/>• AK @ 0x81010002<br/>• PCRs 0, 1, 2, 3, 7"]
-        Agent1["Agent (Port 901)<br/>• /run/authn-scope/workload.sock"]
+        Agent1["Agent (Port 901)<br/>• /run/hyper-svid/workload.sock"]
         WorkloadA["Workload: service-a<br/>(UID 1001)"]
         WorkloadB["Workload: service-b<br/>(UID 1002)"]
     end
 
     subgraph VM2["Guest VM 2 (CID 4)"]
         vTPM2["Virtual TPM (vTPM 2)<br/>• AK @ 0x81010002<br/>• PCRs 0, 1, 2, 3, 7"]
-        Agent2["Agent (Port 901)<br/>• /run/authn-scope/workload.sock"]
+        Agent2["Agent (Port 901)<br/>• /run/hyper-svid/workload.sock"]
         WorkloadC["Workload: database<br/>(UID 1003)"]
     end
 
@@ -56,7 +56,7 @@ flowchart TD
 |---|---|---|---|
 | **Root CA Private Key** | Host (`ca-key.pem`) | Confidentiality & Integrity | Strict `root:root 0600` access; never leaves host memory. |
 | **Host Policy (`host.json`)** | Host Nix Store | Integrity & Immutability | Read-only Nix Store; cryptographically pinned by system closure. |
-| **TOFU Ledger (`known_vms.json`)** | Host (`/var/lib/authn-scope`) | Integrity | Sealed into **Host Hardware TPM** (`known_vms_seal.json`). |
+| **TOFU Ledger (`known_vms.json`)** | Host (`/var/lib/hyper-svid`) | Integrity | Sealed into **Host Hardware TPM** (`known_vms_seal.json`). |
 | **Attestation Private Key (AK)** | Guest vTPM NVRAM | Confidentiality | Non-exportable (`fixedTPM = true`); restricted signing key. |
 | **PCR Registers (0, 1, 2, 3, 7)** | Guest vTPM Engine | Tamper-Evidence | Read-only to OS; extended only via cryptographically chained hashes. |
 | **Workload Private Keys** | Guest RAM | Confidentiality | Ephemeral in-memory only (zero disk storage); 10-minute TTL. |
@@ -102,7 +102,7 @@ stateDiagram-v2
 
 ### Scenario 1: Pre-Boot Attack (Offline Disk & Image Tampering)
 
-* **Attacker Capability**: An attacker modifies the guest virtual disk image before the VM is powered on (e.g. injecting a rootkit into `/boot/vmlinuz`, modifying `initrd`, replacing `authn-scope-agent`, or tampering with virtual UEFI NVRAM).
+* **Attacker Capability**: An attacker modifies the guest virtual disk image before the VM is powered on (e.g. injecting a rootkit into `/boot/vmlinuz`, modifying `initrd`, replacing `hyper-svid-agent`, or tampering with virtual UEFI NVRAM).
 * **Execution & Defenses**:
   1. The VM powers on. Virtual UEFI firmware (OVMF) initializes.
   2. The bootloader measures the altered kernel and initrd into **PCR 2** and **PCR 7**.
@@ -115,7 +115,7 @@ stateDiagram-v2
 
 ### Scenario 2: Early Boot Attack (During Initrd / Early Init Phase)
 
-* **Attacker Capability**: An attacker attempts to intercept boot execution inside `initrd` before `systemd` or `authn-scope-agent` starts.
+* **Attacker Capability**: An attacker attempts to intercept boot execution inside `initrd` before `systemd` or `hyper-svid-agent` starts.
 * **Execution & Defenses**:
   1. In a NixOS VM, the `initrd` contains the measured boot scripts.
   2. Any injected script in `initrd` alters the initrd checksum measured in **PCR 2**.
@@ -129,8 +129,8 @@ stateDiagram-v2
 * **Attacker Capability**: A workload running inside the VM (e.g. `service-b`, running as `UID 1002`) suffers a Remote Code Execution (RCE) vulnerability.
 * **Attacker Goal**: Steal credentials belonging to `service-a` (`UID 1001`) or forge an administrative certificate.
 * **Execution & Defenses**:
-  1. The compromised `service-b` process connects to `/run/authn-scope/workload.sock` requesting `{"type": "fetch"}`.
-  2. `authn-scope-agent` queries the Linux kernel for the connection's peer credentials via `getsockopt(SO_PEERCRED)`.
+  1. The compromised `service-b` process connects to `/run/hyper-svid/workload.sock` requesting `{"type": "fetch"}`.
+  2. `hyper-svid-agent` queries the Linux kernel for the connection's peer credentials via `getsockopt(SO_PEERCRED)`.
   3. The kernel returns `UID 1002`, `GID 1002`, and `PID`.
   4. The agent inspects `/proc/<pid>/exe` and `/proc/<pid>/cgroup` and cross-checks with the policy rules received from the host.
   5. The agent sees that `UID 1002` only matches `service-b` and **refuses to issue `service-a` credentials**.
@@ -152,7 +152,7 @@ stateDiagram-v2
 * **Outcome**: 🔴 **BLOCKED**. The AK is created as a **Restricted Signing Key** (`TPMA_OBJECT_RESTRICTED`). The vTPM firmware rejects `TPM2_Sign` with `TPM_RC_RESTRICTED_KEY`. Only `TPM2_Quote` is permitted, which automatically reads the true hardware PCR registers.
 
 #### Vector 4C: Attempting Cross-VM Impersonation (VM-1 Root attacking VM-2)
-* Root on VM-1 kills `authn-scope-agent`, binds privileged port `901`, and dials the Host CA requesting credentials for `service-b` (assigned to VM-2).
+* Root on VM-1 kills `hyper-svid-agent`, binds privileged port `901`, and dials the Host CA requesting credentials for `service-b` (assigned to VM-2).
 * **Outcome**: 🔴 **BLOCKED**. 
   * The Linux host kernel stamps the vsock connection with `peer_cid = 3` (VM-1).
   * The Host CA verifies `peer_cid` against `host.json`.
@@ -183,13 +183,13 @@ stateDiagram-v2
 
 #### Vector 5B: Tampering with Learned VM Baselines (`known_vms.json`)
 * **Defense**: The SHA-256 hash of `known_vms.json` is sealed into the **Host Physical TPM** under the Storage Root Key (`known_vms_seal.json`).
-* If an attacker modifies `known_vms.json` to trust a malicious VM image, `authn-scope-server` detects that the unsealed TPM hash does not match the file on disk and **refuses to start**.
+* If an attacker modifies `known_vms.json` to trust a malicious VM image, `hyper-svid-server` detects that the unsealed TPM hash does not match the file on disk and **refuses to start**.
 
 ---
 
 ## 3. STRIDE Threat Analysis Matrix
 
-| Threat (STRIDE) | Target Component | Attack Description | Mitigation in VM-AuthN-Scope | Risk Level |
+| Threat (STRIDE) | Target Component | Attack Description | Mitigation in Hyper-SVID | Risk Level |
 |---|---|---|---|:---:|
 | **Spoofing** | Guest Agent $\rightarrow$ Host CA | Rogue VM pretends to be VM-1 | **vTPM AK binding + Nonce challenge + Kernel vsock CID authentication**. | **LOW** |
 | **Spoofing** | Workload $\rightarrow$ Agent | Unprivileged process requests another workload's cert | **Kernel-enforced `SO_PEERCRED` + `/proc/<pid>/exe` inspection**. | **LOW** |

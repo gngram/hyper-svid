@@ -1,4 +1,4 @@
-# authn-scope
+# hyper-svid
 
 A pure-Rust, zero-OpenSSL PKI and mutual trust system for issuing X.509 certificates to workloads across a multi-VM Linux vsock environment.
 
@@ -10,16 +10,16 @@ Features hardware-backed **vTPM remote attestation** for guest VM trust (with Tr
 
 ```
 ┌──── HOST MACHINE ────────────────────────────────────────────────────────┐
-│  authn-scope-server                                                      │
+│  hyper-svid-server                                                       │
 │    • Binds vsock server port (default 900) as Root CA                    │
 │    • Reads immutable host.json directly from read-only Nix store         │
-│    • Host TPM seals /var/lib/authn-scope/known_vms.json against tampering│
+│    • Host TPM seals /var/lib/hyper-svid/known_vms.json against tampering │
 │    • Verifies guest vTPM quotes (PCRs 0, 1, 2, 3, 7) via TOFU            │
 │    • Issues ephemeral ECDSA P-256 X.509 certs on demand                 │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      │ vsock (length-prefixed JSON framing)
 ┌──── GUEST VM (CID N) ──────────────▼─────────────────────────────────────┐
-│  authn-scope-agent                                                       │
+│  hyper-svid-agent                                                        │
 │    • Discovers vTPM device (/dev/tpmrm0 or /dev/tpm0)                    │
 │    • Manages Attestation Key (AK) & answers server TPM2_Quote challenge  │
 │    • Serves local Workload API over Unix Domain Socket                   │
@@ -34,17 +34,17 @@ Features hardware-backed **vTPM remote attestation** for guest VM trust (with Tr
 
 | Crate / Directory | Language | Role |
 |---|---|---|
-| `libs/rust-libs/authn-scope-proto` | Rust | Wire protocol types (`AgentRequest`/`AgentResponse`), framing codecs |
-| `libs/rust-libs/authn-scope-ca` | Rust | Pure-Rust CA engine: P-256 key generation, CSR signing, leaf cert creation |
-| `libs/rust-libs/authn-scope-tpm` | Rust | TPM 2.0 operations: AK creation, TPM2_Quote generation, verification, config sealing |
-| `libs/rust-libs/authn-scope-workload` | Rust | Workload client library: sync fetch, in-memory caching, background rotation loop |
-| `libs/rust-libs/authn-scope-evaluator` | Rust | Peer certificate evaluation & signature verification utility |
-| `apps/rust-apps/authn-scope-server` | Rust | Host CA server daemon with TPM sealing and attestation handling |
-| `apps/rust-apps/authn-scope-agent` | Rust | Guest VM agent with vTPM attestation and local Workload API server |
+| `libs/rust-libs/hyper-svid-proto` | Rust | Wire protocol types (`AgentRequest`/`AgentResponse`), framing codecs |
+| `libs/rust-libs/hyper-svid-ca` | Rust | Pure-Rust CA engine: P-256 key generation, CSR signing, leaf cert creation |
+| `libs/rust-libs/hyper-svid-tpm` | Rust | TPM 2.0 operations: AK creation, TPM2_Quote generation, verification, config sealing |
+| `libs/rust-libs/hyper-svid-workload` | Rust | Workload client library: sync fetch, in-memory caching, background rotation loop |
+| `libs/rust-libs/hyper-svid-evaluator` | Rust | Peer certificate evaluation & signature verification utility |
+| `apps/rust-apps/hyper-svid-server` | Rust | Host CA server daemon with TPM sealing and attestation handling |
+| `apps/rust-apps/hyper-svid-agent` | Rust | Guest VM agent with vTPM attestation and local Workload API server |
 | `apps/rust-apps/workload-test-workload` | Rust | Test workload verifying attestation and rotation |
 | `apps/rust-apps/profiler` | Rust | Memory footprint (VmRSS) and latency benchmark utility |
-| `libs/go-libs/authn-scope-workload` | Go | Go client library for the Workload API with background rotation |
-| `libs/go-libs/authn-scope-evaluator` | Go | Go peer certificate evaluation & signature verification utility |
+| `libs/go-libs/hyper-svid-workload` | Go | Go client library for the Workload API with background rotation |
+| `libs/go-libs/hyper-svid-evaluator` | Go | Go peer certificate evaluation & signature verification utility |
 
 ---
 
@@ -54,9 +54,9 @@ Features hardware-backed **vTPM remote attestation** for guest VM trust (with Tr
 sequenceDiagram
     autonumber
     participant Workload as Workload (Process)
-    participant Agent as Guest Agent (authn-scope-agent)
+    participant Agent as Guest Agent (hyper-svid-agent)
     participant vTPM as Guest vTPM (/dev/tpmrm0)
-    participant Server as Host CA (authn-scope-server)
+    participant Server as Host CA (hyper-svid-server)
     participant HostTPM as Host TPM (/dev/tpmrm0)
 
     %% PHASE 1: Host Server Startup & Initialization
@@ -81,13 +81,13 @@ sequenceDiagram
     Server->>Server: Verify quote RSA signature & nonce (pure Rust)
     Server->>Server: Check/Record PCRs in known_vms.json (TOFU)
     Server-->>Agent: HandshakeOk { workloads: [service-a, service-b] }
-    Agent->>Agent: Bind protect listener to client port 901 & serve UDS /run/authn-scope/workload.sock
+    Agent->>Agent: Bind protect listener to client port 901 & serve UDS /run/hyper-svid/workload.sock
     end
 
     %% PHASE 3: On-Demand Credential Issuance
     rect rgb(255, 250, 240)
     Note over Workload,Server: Phase 3: Workload Authentication & Certificate Issuance
-    Workload->>Agent: Connect to /run/authn-scope/workload.sock {"type": "fetch"}
+    Workload->>Agent: Connect to /run/hyper-svid/workload.sock {"type": "fetch"}
     Agent->>Agent: Inspect caller credentials (SO_PEERCRED, /proc/pid/exe, /proc/pid/cgroup)
     Agent->>Agent: Match selectors -> resolve identity "service-a"
     Agent->>Agent: Generate ephemeral ECDSA P-256 key pair & PKCS#10 CSR
@@ -102,7 +102,7 @@ sequenceDiagram
     rect rgb(250, 240, 255)
     Note over Workload,Agent: Phase 4: Automatic In-Memory Credential Rotation
     Workload->>Workload: Background rotation loop triggers at 50% TTL
-    Workload->>Agent: Connect to /run/authn-scope/workload.sock {"type": "fetch"}
+    Workload->>Agent: Connect to /run/hyper-svid/workload.sock {"type": "fetch"}
     Agent->>Server: Request renewed certificate from Host CA
     Server-->>Agent: CertOk { new_cert_pem, ca_cert_pem }
     Agent-->>Workload: Return rotated in-memory credentials
@@ -119,21 +119,21 @@ sequenceDiagram
 3. The server challenges the agent with a 32-byte cryptographic random nonce (`AttestationChallenge`).
 4. The agent signs a quote over PCRs 0, 1, 2, 3, 7 with the nonce.
 5. The server verifies the RSA signature in software.
-6. **Trust-On-First-Use (TOFU)**: On the first boot, the server records the PCR digest in `/var/lib/authn-scope/known_vms.json`. On subsequent boots, any mismatch (e.g. tampered firmware or bootloader) immediately aborts the handshake.
+6. **Trust-On-First-Use (TOFU)**: On the first boot, the server records the PCR digest in `/var/lib/hyper-svid/known_vms.json`. On subsequent boots, any mismatch (e.g. tampered firmware or bootloader) immediately aborts the handshake.
 
 ### 2. Host TPM Sealing of TOFU State (`known_vms.json`)
-To prevent an offline attacker or untrusted process on the host from modifying the learned guest PCR baselines, the SHA-256 hash of `/var/lib/authn-scope/known_vms.json` is **sealed directly into the Host TPM** (`known_vms_seal.json`). On startup, the server verifies that `known_vms.json` has not been tampered with before trusting any guest VM connections.
+To prevent an offline attacker or untrusted process on the host from modifying the learned guest PCR baselines, the SHA-256 hash of `/var/lib/hyper-svid/known_vms.json` is **sealed directly into the Host TPM** (`known_vms_seal.json`). On startup, the server verifies that `known_vms.json` has not been tampered with before trusting any guest VM connections.
 
 ---
 
 ## Configuration Reference
 
-### Host (`/etc/authn-scope/host.json`)
+### Host (`/etc/hyper-svid/host.json`)
 
 ```json
 {
-  "ca_cert_path": "/etc/authn-scope/ca/ca-cert.pem",
-  "ca_key_path": "/etc/authn-scope/ca/ca-key.pem",
+  "ca_cert_path": "/etc/hyper-svid/ca/ca-cert.pem",
+  "ca_key_path": "/etc/hyper-svid/ca/ca-key.pem",
   "server_port": 900,
   "peer_port": 901,
   "vms": {
@@ -158,14 +158,14 @@ To prevent an offline attacker or untrusted process on the host from modifying t
 }
 ```
 
-### Guest Agent (`/etc/authn-scope/agent.json`)
+### Guest Agent (`/etc/hyper-svid/agent.json`)
 
 ```json
 {
   "vm_name": "local-vm",
   "server_port": 900,
   "client_port": 901,
-  "workload_api_socket": "/run/authn-scope/workload.sock"
+  "workload_api_socket": "/run/hyper-svid/workload.sock"
 }
 ```
 
@@ -247,7 +247,7 @@ qemu-system-x86_64 \
 |---|---|---|
 | **vTPM Socket (`swtpm`)** | ❌ **No (1 per VM)** | **Isolated**. Each VM has its own hardware registers (PCRs 0–23), NVRAM, and Endorsement/Attestation Keys. Sharing a vTPM socket causes PCR measurement corruption, session race conditions, and cryptographic identity collisions. |
 | **Host CA vsock (`vsock:900`)** | ✅ **Yes (Shared)** | **Multiplexed**. All VMs dial `host_cid=2, port=900`. The server identifies callers using their distinct Linux vsock `CID` (e.g. CID 3, CID 4). |
-| **Workload UDS (`workload.sock`)** | ✅ **Yes (Per-VM)** | **Shared by local processes**. All workloads inside VM-1 share VM-1's `/run/authn-scope/workload.sock`. The agent inspects `SO_PEERCRED` to identify each calling process. |
+| **Workload UDS (`workload.sock`)** | ✅ **Yes (Per-VM)** | **Shared by local processes**. All workloads inside VM-1 share VM-1's `/run/hyper-svid/workload.sock`. The agent inspects `SO_PEERCRED` to identify each calling process. |
 
 #### Multi-VM Launch Pattern:
 
@@ -267,19 +267,19 @@ qemu-system-x86_64 ... -device vhost-vsock-pci,guest-cid=4 -chardev socket,id=ch
 
 Once each VM boots with its respective parameters:
 1. The Linux kernel initializes the `tpm_tis` driver, presenting `/dev/tpmrm0` (TPM Resource Manager) and `/dev/tpm0`.
-2. `authn-scope-agent` auto-detects `/dev/tpmrm0` on startup, creates the Attestation Key (AK), and completes the attestation handshake with the host server.
+2. `hyper-svid-agent` auto-detects `/dev/tpmrm0` on startup, creates the Attestation Key (AK), and completes the attestation handshake with the host server.
 
-Workloads inside the guest VM fetch credentials over `/run/authn-scope/workload.sock` with zero file I/O:
+Workloads inside the guest VM fetch credentials over `/run/hyper-svid/workload.sock` with zero file I/O:
 
 ### Rust Example
 
 ```rust
 use std::time::Duration;
-use authn_scope_workload::WorkloadClient;
+use hyper_svid_workload::WorkloadClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = WorkloadClient::new("/run/authn-scope/workload.sock");
+    let client = WorkloadClient::new("/run/hyper-svid/workload.sock");
 
     // Fetch initial credentials
     let creds = client.fetch_credentials().await?;
@@ -302,11 +302,11 @@ import (
     "log"
     "time"
 
-    workload "authn-scope-workload"
+    workload "hyper-svid-workload"
 )
 
 func main() {
-    client := workload.NewWorkloadClient("/run/authn-scope/workload.sock")
+    client := workload.NewWorkloadClient("/run/hyper-svid/workload.sock")
 
     creds, err := client.FetchCredentials()
     if err != nil {
@@ -357,21 +357,21 @@ run-profiler
 
 ## CLI Reference
 
-### Host Server (`authn-scope-server`)
+### Host Server (`hyper-svid-server`)
 
 ```bash
 # Start server (generates CA keys if --genkey is passed)
-sudo authn-scope-server --config /etc/authn-scope/host.json --genkey
+sudo hyper-svid-server --config /etc/hyper-svid/host.json --genkey
 
 # Reset attestation (TOFU) state for a VM after a legitimate OS image rebuild (automatically re-seals known_vms.json)
-sudo authn-scope-server --reset-attestation local-vm
+sudo hyper-svid-server --reset-attestation local-vm
 ```
 
-### Guest Agent (`authn-scope-agent`)
+### Guest Agent (`hyper-svid-agent`)
 
 ```bash
 # Start agent daemon
-sudo authn-scope-agent --config /etc/authn-scope/agent.json
+sudo hyper-svid-agent --config /etc/hyper-svid/agent.json
 ```
 
 ---

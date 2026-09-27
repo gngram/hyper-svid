@@ -1,0 +1,15 @@
+[package]
+name    = "hyper-svid-proto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+anyhow     = { workspace = true }
+prost      = { workspace = true }
+tonic      = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }

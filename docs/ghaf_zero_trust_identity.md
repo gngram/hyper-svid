@@ -24,7 +24,7 @@ Securely issue identity to workloads running in each VM. The identity should adh
 ### Requirement 1: CA should run in either host/admin.
 - **`ghaf-secureid`**:
   - By default, the CA runs on the host and uses `AF_VSOCK` to communicate with other VMs, eliminating network MITM attacks.
-  - The CA can be moved to `AdminVM` by forwarding the vsock port in the host kernel, or by running over the built-in TCP transport without requiring vsock forwarding.
+  - The CA can be moved to `AdminVM` by forwarding the vsock port in the host kernel.
 - **`SPIRE`**:
   - The SPIRE Server runs as a TCP daemon and can be placed in `AdminVM` or the host.
     However, it requires a full TCP/IP network stack running, it can not issue identity to workloads which need identity in early stage of VM boot.
@@ -59,7 +59,7 @@ Securely issue identity to workloads running in each VM. The identity should adh
 
 ### Requirement 6: Credentials by default should not be stored on disk.
 - **`ghaf-secureid`**:
-  - Ephemeral ECDSA P-256 private keys and certificates are generated in memory and delivered strictly over a Unix Domain Socket (`/run/authn-scope/workload.sock`). Keys never touch persistent disk.
+  - Ephemeral ECDSA P-256 private keys and certificates are generated in memory and delivered strictly over a Unix Domain Socket (`/run/hyper-svid/workload.sock`). Keys never touch persistent disk.
 - **`SPIRE`**:
   - SPIRE Agent streams X.509-SVIDs in memory over a Unix Domain Socket; private keys reside in memory and are not persisted to disk by default.
 
@@ -74,7 +74,7 @@ Securely issue identity to workloads running in each VM. The identity should adh
 ### Requirement 8: NixOS Integration
 - **`ghaf-secureid (Seamless & 100% Declarative)`**:
   - Zero Registration Delays: Supports fully declarative configuration. Workload policies, selectors, and VM mappings are pre-compiled into immutable Nix store config (host.json); the server can issue identity to authorized workloads dynamically during the early-boot vsock handshake (sysinit.target), so workloads are ready immediately on boot with no extra registration services or scripts.
-  - Zero Auxiliary Bootstrap Services: The Root CA trust bundle is delivered in-band over the authenticated vsock/TCP channel.
+  - Zero Auxiliary Bootstrap Services: The Root CA trust bundle is delivered in-band over the authenticated vsock channel.
 
 - **`SPIRE (Auxiliary Services & Startup Delays)`**:
   - Runtime Registration Bottlenecks: Workloads cannot obtain identities until an imperative registration service/script executes spire-server entry create at runtime, creating complex systemd dependency chains and noticeable service startup delays.

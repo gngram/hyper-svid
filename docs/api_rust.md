@@ -1,28 +1,28 @@
 # Rust Workload API Usage & Client Library
 
-The **Workload API** is exposed by `authn-scope-agent` via a Unix Domain Socket (default path: `/run/authn-scope/workload.sock`). Applications running inside a guest VM can obtain dynamically issued X.509 certificates and keys without managing CSRs or long-term private keys.
+The **Workload API** is exposed by `hyper-svid-agent` via a Unix Domain Socket (default path: `/run/hyper-svid/workload.sock`). Applications running inside a guest VM can obtain dynamically issued X.509 certificates and keys without managing CSRs or long-term private keys.
 
 ---
 
-## Option 1: Using the Official `authn-scope-workload` Client Crate
+## Option 1: Using the Official `hyper-svid-workload` Client Crate
 
-The workspace provides the `authn-scope-workload` library which manages background rotation automatically:
+The workspace provides the `hyper-svid-workload` library which manages background rotation automatically:
 
 ### `Cargo.toml`
 ```toml
 [dependencies]
-authn-scope-workload = { path = "libs/rust-libs/authn-scope-workload" }
+hyper-svid-workload = { path = "libs/rust-libs/hyper-svid-workload" }
 tokio = { version = "1", features = ["full"] }
 ```
 
 ### Usage Example
 ```rust
 use std::time::Duration;
-use authn_scope_workload::WorkloadClient;
+use hyper_svid_workload::WorkloadClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = WorkloadClient::new("/run/authn-scope/workload.sock");
+    let client = WorkloadClient::new("/run/hyper-svid/workload.sock");
 
     // 1. Synchronous fetch on startup
     let creds = client.fetch_credentials().await?;
@@ -90,6 +90,6 @@ fn fetch_credentials(socket_path: &str) -> Result<(), Box<dyn std::error::Error>
 ---
 
 **References**
-* Client crate – `libs/rust-libs/authn-scope-workload/src/lib.rs`
+* Client crate – `libs/rust-libs/hyper-svid-workload/src/lib.rs`
 * Test binary – `apps/rust-apps/workload-test-workload/src/main.rs`
-* Agent implementation – `apps/rust-apps/authn-scope-agent/src/client.rs`
+* Agent implementation – `apps/rust-apps/hyper-svid-agent/src/client.rs`

@@ -1,6 +1,4 @@
-{
-  buildGoModule,
-}:
+{buildGoModule}:
 buildGoModule {
   pname = "grpc-app-go";
   version = "0.1.0";

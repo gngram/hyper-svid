@@ -8,9 +8,9 @@ name = "profiler"
 path = "src/main.rs"
 
 [dependencies]
-authn-scope-ca    = { workspace = true }
-authn-scope-proto = { workspace = true }
-authn-scope-tpm   = { workspace = true }
+hyper-svid-ca    = { workspace = true }
+hyper-svid-proto = { workspace = true }
+hyper-svid-tpm   = { workspace = true }
 rcgen             = { workspace = true }
 ring              = { workspace = true }
 rustls-pemfile    = { workspace = true }

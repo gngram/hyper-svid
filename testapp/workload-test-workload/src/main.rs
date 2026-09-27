@@ -29,7 +29,12 @@ async fn fetch_svid(socket_path: &str) -> Result<Certs> {
 
     let client = WorkloadApiClient::connect_to(&endpoint_str)
         .await
-        .with_context(|| format!("Failed to connect to SPIFFE Workload API at {}", endpoint_str))?;
+        .with_context(|| {
+            format!(
+                "Failed to connect to SPIFFE Workload API at {}",
+                endpoint_str
+            )
+        })?;
 
     let context = client
         .fetch_x509_context()
@@ -68,9 +73,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = args
         .get(1)
         .map(|s| s.as_str())
-        .unwrap_or("/run/authn-scope/workload.sock");
+        .unwrap_or("/run/hyper-svid/workload.sock");
 
-    println!("Connecting to official SPIFFE Workload API socket: {}", socket_path);
+    println!(
+        "Connecting to official SPIFFE Workload API socket: {}",
+        socket_path
+    );
 
     let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
     let cert_path = format!("/tmp/workload-cert-{}.pem", username);

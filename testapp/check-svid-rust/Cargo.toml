@@ -8,12 +8,12 @@ name = "check-svid-rust"
 path = "src/bin/check-svid-rust.rs"
 
 [dependencies]
-authn-scope-proto = { workspace = true }
-authn-scope-ca    = { workspace = true }
+hyper-svid-proto = { workspace = true }
+hyper-svid-ca    = { workspace = true }
 x509-parser      = { workspace = true, features = ["verify"] }
 thiserror        = { workspace = true }
 tracing          = { workspace = true }
-rcgen            = { workspace = true } # Needed only for tests if we mock CA, but we can just use authn-scope-ca
+rcgen            = { workspace = true } # Needed only for tests if we mock CA, but we can just use hyper-svid-ca
 
 [dev-dependencies]
 tempfile         = "3.10"

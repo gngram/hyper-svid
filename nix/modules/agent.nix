@@ -4,21 +4,21 @@
   pkgs,
   ...
 }: let
-  cfg = config.services.authn-scope.agent;
-  shared = config.services.authn-scope;
+  cfg = config.services.hyper-svid.agent;
+  shared = config.services.hyper-svid;
 in {
-  options.services.authn-scope.agentPort = lib.mkOption {
+  options.services.hyper-svid.agentPort = lib.mkOption {
     type = lib.types.port;
     default = 901;
     description = "The vsock port the agent binds/dials from.";
   };
 
-  options.services.authn-scope.agent = {
-    enable = lib.mkEnableOption "VM-AuthN-Scope Agent";
+  options.services.hyper-svid.agent = {
+    enable = lib.mkEnableOption "Hyper-SVID Agent";
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "The authn-scope package to use.";
+      description = "The hyper-svid package to use.";
     };
 
     settings = lib.mkOption {
@@ -31,11 +31,11 @@ in {
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [cfg.package];
 
-    services.udev.extraRules = lib.mkIf (cfg.settings.transport or "vsock" == "vsock") ''
+    services.udev.extraRules = ''
       KERNEL=="vsock", TAG+="systemd"
     '';
 
-    environment.etc."authn-scope/agent.json".source = (pkgs.formats.json {}).generate "agent.json" ({
+    environment.etc."hyper-svid/agent.json".source = (pkgs.formats.json {}).generate "agent.json" ({
         vm_name = config.networking.hostName;
       }
       // cfg.settings
@@ -43,18 +43,18 @@ in {
         client_port = shared.agentPort;
       });
 
-    systemd.services.authn-scope-agent = {
-      description = "VM-AuthN-Scope Agent";
+    systemd.services.hyper-svid-agent = {
+      description = "Hyper-SVID Agent";
       # Anchor to early boot instead of normal multi-user startup
       wantedBy = ["sysinit.target"];
       unitConfig = {
         DefaultDependencies = false;
       };
-      bindsTo = lib.optional (cfg.settings.transport or "vsock" == "vsock") "dev-vsock.device";
-      after = lib.optional (cfg.settings.transport or "vsock" == "vsock") "dev-vsock.device";
+      bindsTo = ["dev-vsock.device"];
+      after = ["dev-vsock.device"];
       before = ["sysinit.target"];
       serviceConfig = {
-        ExecStart = "${cfg.package}/bin/authn-scope-agent --config /etc/authn-scope/agent.json";
+        ExecStart = "${cfg.package}/bin/hyper-svid-agent --config /etc/hyper-svid/agent.json";
         Restart = "always";
       };
     };

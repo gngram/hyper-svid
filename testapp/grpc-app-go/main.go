@@ -55,7 +55,7 @@ func main() {
 	if len(args) > 1 {
 		addr = args[1]
 	}
-	socketPath := "/run/authn-scope/workload.sock"
+	socketPath := "/run/hyper-svid/workload.sock"
 	if len(args) > 2 {
 		socketPath = args[2]
 	}

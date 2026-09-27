@@ -1,0 +1,72 @@
+/*
+ * vsock listener implementation for hyper-svid-server.
+ */
+
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio_vsock::{VsockAddr, VsockListener, VMADDR_CID_ANY};
+use tracing::{error, info};
+
+use hyper_svid_ca::CertificateAuthority;
+
+use crate::{
+    attestation::KnownVms, config::HostConfig, handler::handle_connection,
+    notifications::NotificationRegistry, transport::PeerInfo,
+};
+
+// Start the vsock listener loop.
+pub async fn run_vsock_listener(
+    config: Arc<HostConfig>,
+    ca: Arc<CertificateAuthority>,
+    known_vms: Arc<Mutex<KnownVms>>,
+    notification_registry: Arc<NotificationRegistry>,
+) -> anyhow::Result<()> {
+    let port = config.server_port;
+
+    let addr = VsockAddr::new(VMADDR_CID_ANY, port);
+    let mut listener = VsockListener::bind(addr)?;
+
+    info!(port, "hyper-svid-server listening on vsock");
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, peer_addr)) => {
+                let peer_cid = peer_addr.cid();
+                let peer_port = peer_addr.port();
+                info!(peer_cid, peer_port, "Accepted vsock connection");
+
+                // Verify the peer port of the client (must be peer_port or notification_port)
+                if peer_port != config.peer_port && peer_port != config.notification_port {
+                    error!(
+                        peer_port,
+                        expected_peer = config.peer_port,
+                        expected_notification = config.notification_port,
+                        "Rejected connection: peer port mismatch"
+                    );
+                    continue; // Drop stream
+                }
+
+                let config = Arc::clone(&config);
+                let ca = Arc::clone(&ca);
+                let known_vms = Arc::clone(&known_vms);
+                let notification_registry = Arc::clone(&notification_registry);
+                let peer_info = PeerInfo::from_vsock(peer_cid);
+
+                tokio::spawn(async move {
+                    handle_connection(
+                        stream,
+                        peer_info,
+                        config,
+                        ca,
+                        known_vms,
+                        notification_registry,
+                    )
+                    .await;
+                });
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to accept vsock connection");
+            }
+        }
+    }
+}

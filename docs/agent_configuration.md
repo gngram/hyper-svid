@@ -1,6 +1,6 @@
-# VM-AuthN-Scope Guest Agent Configuration Reference
+# Hyper-SVID Guest Agent Configuration Reference
 
-This document describes the configuration and operational model of the **VM-AuthN-Scope Guest Agent** (`authn-scope-agent`). The configuration is stored as JSON (default location `/etc/authn-scope/agent.json`).
+This document describes the configuration and operational model of the **Hyper-SVID Guest Agent** (`hyper-svid-agent`). The configuration is stored as JSON (default location `/etc/hyper-svid/agent.json`).
 
 ## Configuration Options
 
@@ -10,7 +10,7 @@ This document describes the configuration and operational model of the **VM-Auth
 | `server_port`         | `integer`| The vsock port on which the host CA server is listening.                             | `900` |
 | `client_port`         | `integer`| The local vsock port the agent binds to when dialing host CSR requests.              | `901` |
 | `notification_port`   | `integer`| The local vsock port the agent binds to when subscribing to notifications.           | `902` |
-| `workload_api_socket` | `string`| Path of the Unix‑Domain Socket exposing the **Workload API** to local applications.  | `"/run/authn-scope/workload.sock"` |
+| `workload_api_socket` | `string`| Path of the Unix‑Domain Socket exposing the **Workload API** to local applications.  | `"/run/hyper-svid/workload.sock"` |
 
 ---
 
@@ -78,13 +78,13 @@ virtualisation.vmVariant.virtualisation.qemu.options = [
 |---|---|---|
 | **vTPM Socket (`swtpm`)** | ❌ **No (1 per VM)** | **Isolated**. Each VM has its own hardware registers (PCRs 0–23), NVRAM, and Endorsement/Attestation Keys. Sharing a vTPM socket causes PCR measurement corruption, session race conditions, and cryptographic identity collisions. |
 | **Host CA vsock (`vsock:900`)** | ✅ **Yes (Shared)** | **Multiplexed**. All VMs dial `host_cid=2, port=900`. The server identifies callers using their distinct Linux vsock `CID` (e.g. CID 3, CID 4). |
-| **Workload UDS (`workload.sock`)** | ✅ **Yes (Per-VM)** | **Shared by local processes**. All workloads inside VM-1 share VM-1's `/run/authn-scope/workload.sock`. The agent inspects `SO_PEERCRED` to identify each calling process. |
+| **Workload UDS (`workload.sock`)** | ✅ **Yes (Per-VM)** | **Shared by local processes**. All workloads inside VM-1 share VM-1's `/run/hyper-svid/workload.sock`. The agent inspects `SO_PEERCRED` to identify each calling process. |
 
 ---
 
 ## Workload API Overview
 
-The agent runs a lightweight JSON‑RPC server on the Unix Domain Socket defined by `workload_api_socket` (default: `/run/authn-scope/workload.sock` with `0666` permissions). Applications obtain X.509 credentials by sending a single JSON line:
+The agent runs a lightweight JSON‑RPC server on the Unix Domain Socket defined by `workload_api_socket` (default: `/run/hyper-svid/workload.sock` with `0666` permissions). Applications obtain X.509 credentials by sending a single JSON line:
 
 ```json
 { "type": "fetch" }
@@ -130,6 +130,6 @@ Response on error (or if process fails attestation):
 
 **References**
 * Sample `agent.json` – `config-examples/agent.json`.
-* Wire protocol – `libs/rust-libs/authn-scope-proto/src/wire.rs`.
-* TPM library – `libs/rust-libs/authn-scope-tpm/src/lib.rs`.
-* Workload client libraries – `libs/rust-libs/authn-scope-workload` (Rust) and `libs/go-libs/authn-scope-workload` (Go).
+* Wire protocol – `libs/rust-libs/hyper-svid-proto/src/wire.rs`.
+* TPM library – `libs/rust-libs/hyper-svid-tpm/src/lib.rs`.
+* Workload client libraries – `libs/rust-libs/hyper-svid-workload` (Rust) and `libs/go-libs/hyper-svid-workload` (Go).

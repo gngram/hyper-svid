@@ -6,8 +6,8 @@
   pkgs,
   ...
 }: let
-  authScope = pkgs.callPackage ../pkgs/authn-scope-rust.nix {};
-  authScopeGo = pkgs.callPackage ../pkgs/authn-scope-go.nix {};
+  hyperSvid = pkgs.callPackage ../pkgs/hyper-svid-rust.nix {};
+  hyperSvidGo = pkgs.callPackage ../pkgs/hyper-svid-go.nix {};
 
   checkSvidRustScript = pkgs.writeShellScript "run-check-svid-rust" ''
     set -x
@@ -18,13 +18,13 @@
 
     echo "==> [VM-1 check-svid-rust] Waiting for Workload API socket..."
     for i in $(seq 1 60); do
-      [ -S /run/authn-scope/workload.sock ] && break
+      [ -S /run/hyper-svid/workload.sock ] && break
       sleep 1
     done
-    [ -S /run/authn-scope/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
+    [ -S /run/hyper-svid/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
 
     echo "==> [VM-1 check-svid-rust] Fetching credentials via Workload API (systemd selector: check-svid-rust.service)..."
-    env USER=check-svid-rust /workspace/target/release/workload-test-workload /run/authn-scope/workload.sock
+    env USER=check-svid-rust /workspace/target/release/workload-test-workload /run/hyper-svid/workload.sock
 
     cp /tmp/workload-cert-check-svid-rust.pem /workspace/test-result/vm1-check-svid-rust-cert.pem
     cp /tmp/workload-ca-check-svid-rust.pem   /workspace/test-result/ca-cert.pem
@@ -48,13 +48,13 @@
 
     echo "==> [VM-1 check-svid-go] Waiting for Workload API socket..."
     for i in $(seq 1 60); do
-      [ -S /run/authn-scope/workload.sock ] && break
+      [ -S /run/hyper-svid/workload.sock ] && break
       sleep 1
     done
-    [ -S /run/authn-scope/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
+    [ -S /run/hyper-svid/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
 
     echo "==> [VM-1 check-svid-go] Fetching credentials via Workload API (systemd selector: check-svid-go.service)..."
-    env USER=check-svid-go /workspace/target/release/workload-test-workload /run/authn-scope/workload.sock
+    env USER=check-svid-go /workspace/target/release/workload-test-workload /run/hyper-svid/workload.sock
 
     cp /tmp/workload-cert-check-svid-go.pem /workspace/test-result/vm1-check-svid-go-cert.pem
 
@@ -77,13 +77,13 @@
 
     echo "==> [VM-1 grpc-app] Waiting for Workload API socket..."
     for i in $(seq 1 60); do
-      [ -S /run/authn-scope/workload.sock ] && break
+      [ -S /run/hyper-svid/workload.sock ] && break
       sleep 1
     done
-    [ -S /run/authn-scope/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
+    [ -S /run/hyper-svid/workload.sock ] || { echo "[VM-1] Workload socket never appeared"; exit 1; }
 
     echo "==> [VM-1 grpc-app] Running Rust gRPC test application (systemd selector: grpc-app.service)..."
-    /workspace/target/release/grpc-app-rust server 0.0.0.0:50052 /run/authn-scope/workload.sock &
+    /workspace/target/release/grpc-app-rust server 0.0.0.0:50052 /run/hyper-svid/workload.sock &
     RUST_PID=$!
 
     # Wait up to 60 seconds for VM-2 to finish its gRPC client test
@@ -102,7 +102,7 @@
   '';
 in {
   imports = [
-    ../modules/authn-scope.nix
+    ../modules/hyper-svid.nix
   ];
 
   networking.hostName = "vm-1";
@@ -150,25 +150,24 @@ in {
   };
 
   systemd.tmpfiles.rules = [
-    "d /run/authn-scope 0755 root root -"
+    "d /run/hyper-svid 0755 root root -"
   ];
 
-  services.authn-scope.agent = {
+  services.hyper-svid.agent = {
     enable = true;
-    package = authScope;
+    package = hyperSvid;
     settings = {
       vm_name = "vm-1";
-      transport = "tcp";
-      server_addr = "10.0.2.2:9000";
-      workload_api_socket = "/run/authn-scope/workload.sock";
+      server_port = 900;
+      workload_api_socket = "/run/hyper-svid/workload.sock";
     };
   };
 
   systemd.services.check-svid-rust = {
     description = "Run VM-1 check-svid-rust test";
     wantedBy = ["multi-user.target"];
-    after = ["authn-scope-agent.service" "network.target"];
-    requires = ["authn-scope-agent.service"];
+    after = ["hyper-svid-agent.service" "network.target"];
+    requires = ["hyper-svid-agent.service"];
     serviceConfig = {
       Type = "oneshot";
       User = "root";
@@ -179,8 +178,8 @@ in {
   systemd.services.check-svid-go = {
     description = "Run VM-1 check-svid-go test";
     wantedBy = ["multi-user.target"];
-    after = ["authn-scope-agent.service" "network.target"];
-    requires = ["authn-scope-agent.service"];
+    after = ["hyper-svid-agent.service" "network.target"];
+    requires = ["hyper-svid-agent.service"];
     serviceConfig = {
       Type = "oneshot";
       User = "root";
@@ -191,8 +190,8 @@ in {
   systemd.services.grpc-app = {
     description = "Run VM-1 gRPC server application test";
     wantedBy = ["multi-user.target"];
-    after = ["authn-scope-agent.service" "network.target"];
-    requires = ["authn-scope-agent.service"];
+    after = ["hyper-svid-agent.service" "network.target"];
+    requires = ["hyper-svid-agent.service"];
     serviceConfig = {
       Type = "oneshot";
       User = "root";

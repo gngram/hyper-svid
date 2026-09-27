@@ -4,21 +4,21 @@
   pkgs,
   ...
 }: let
-  cfg = config.services.authn-scope.server;
-  shared = config.services.authn-scope;
+  cfg = config.services.hyper-svid.server;
+  shared = config.services.hyper-svid;
 in {
-  options.services.authn-scope.serverPort = lib.mkOption {
+  options.services.hyper-svid.serverPort = lib.mkOption {
     type = lib.types.port;
     default = 900;
     description = "The vsock port the server listens on.";
   };
 
-  options.services.authn-scope.server = {
-    enable = lib.mkEnableOption "VM-AuthN-Scope Server";
+  options.services.hyper-svid.server = {
+    enable = lib.mkEnableOption "Hyper-SVID Server";
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "The authn-scope package to use.";
+      description = "The hyper-svid package to use.";
     };
 
     settings = lib.mkOption {
@@ -37,26 +37,26 @@ in {
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [cfg.package];
 
-    services.udev.extraRules = lib.mkIf (cfg.settings.transport or "vsock" == "vsock") ''
+    services.udev.extraRules = ''
       KERNEL=="vsock", TAG+="systemd"
     '';
 
-    environment.etc."authn-scope/host.json".source = (pkgs.formats.json {}).generate "host.json" (cfg.settings
+    environment.etc."hyper-svid/host.json".source = (pkgs.formats.json {}).generate "host.json" (cfg.settings
       // {
         server_port = shared.serverPort;
       });
 
-    systemd.services.authn-scope-server = {
-      description = "VM-AuthN-Scope Host Server";
+    systemd.services.hyper-svid-server = {
+      description = "Hyper-SVID Host Server";
       wantedBy = ["sysinit.target"];
       unitConfig = {
         DefaultDependencies = false;
       };
-      bindsTo = lib.optional (cfg.settings.transport or "vsock" == "vsock") "dev-vsock.device";
-      after = lib.optional (cfg.settings.transport or "vsock" == "vsock") "dev-vsock.device";
+      bindsTo = ["dev-vsock.device"];
+      after = ["dev-vsock.device"];
       before = ["sysinit.target"];
       serviceConfig = {
-        ExecStart = "${cfg.package}/bin/authn-scope-server --config /etc/authn-scope/host.json${lib.optionalString cfg.generateKey " --genkey"}";
+        ExecStart = "${cfg.package}/bin/hyper-svid-server --config /etc/hyper-svid/host.json${lib.optionalString cfg.generateKey " --genkey"}";
         Restart = "always";
       };
     };

@@ -1,19 +1,19 @@
 {
   pkgs,
   nixosModules,
-  authScope,
-  authScopeGo,
+  hyperSvid,
+  hyperSvidGo,
 }: let
   testModule = {lib, ...}: {
     imports = [nixosModules.default];
 
     # We need vsock loopback support
     boot.kernelModules = ["vsock_loopback"];
-    environment.systemPackages = [pkgs.time authScopeGo pkgs.openssl pkgs.swtpm pkgs.tpm2-tools];
+    environment.systemPackages = [pkgs.time hyperSvidGo pkgs.openssl pkgs.swtpm pkgs.tpm2-tools];
 
     # CA Storage
     systemd.tmpfiles.rules = [
-      "d /etc/authn-scope/ca 0700 root root"
+      "d /etc/hyper-svid/ca 0700 root root"
       "d /var/lib/service-a 0700 root root"
       "d /var/lib/service-b 0700 root root"
       "d /var/lib/service-c 0700 root root"
@@ -38,16 +38,16 @@
       uid = 999;
     };
 
-    # Use our NixOS modules to configure authn-scope
-    services.authn-scope.serverPort = 900;
-    services.authn-scope.agentPort = 901;
-    services.authn-scope.server = {
+    # Use our NixOS modules to configure hyper-svid
+    services.hyper-svid.serverPort = 900;
+    services.hyper-svid.agentPort = 901;
+    services.hyper-svid.server = {
       enable = true;
-      package = authScope;
+      package = hyperSvid;
       generateKey = true;
       settings = {
-        ca_cert_path = "/etc/authn-scope/ca/ca-cert.pem";
-        ca_key_path = "/etc/authn-scope/ca/ca-key.pem";
+        ca_cert_path = "/etc/hyper-svid/ca/ca-cert.pem";
+        ca_key_path = "/etc/hyper-svid/ca/ca-key.pem";
         peer_port = 901;
         vms."local-vm" = {
           vm_cid = 1;
@@ -73,27 +73,27 @@
       };
     };
 
-    systemd.services.authn-scope-agent.environment.VSOCK_HOST_CID = "1";
+    systemd.services.hyper-svid-agent.environment.VSOCK_HOST_CID = "1";
 
-    services.authn-scope.agent = {
+    services.hyper-svid.agent = {
       enable = true;
-      package = authScope;
+      package = hyperSvid;
       settings = {
         vm_name = "local-vm";
         server_port = 900;
-        workload_api_socket = "/run/authn-scope/workload.sock";
+        workload_api_socket = "/run/hyper-svid/workload.sock";
       };
     };
 
     # Disable auto-start of the agent during the test so we can run it manually
-    systemd.services.authn-scope-agent.wantedBy = lib.mkForce [];
+    systemd.services.hyper-svid-agent.wantedBy = lib.mkForce [];
 
     systemd.services.service-a = {
       description = "Service A Workload using Workload API";
       wantedBy = [];
-      after = ["authn-scope-agent.service"];
+      after = ["hyper-svid-agent.service"];
       serviceConfig = {
-        ExecStart = "${authScope}/bin/workload-test-workload /run/authn-scope/workload.sock --test-rotation";
+        ExecStart = "${hyperSvid}/bin/workload-test-workload /run/hyper-svid/workload.sock --test-rotation";
         User = "service-a";
         Group = "service-a";
         Type = "oneshot";
@@ -104,22 +104,22 @@
   };
 in
   pkgs.testers.runNixOSTest {
-    name = "authn-scope-test";
+    name = "hyper-svid-test";
     nodes.machine = testModule;
 
     testScript = ''
       machine.wait_for_unit("multi-user.target")
 
       # Wait for the server to be listening
-      machine.wait_for_unit("authn-scope-server.service")
+      machine.wait_for_unit("hyper-svid-server.service")
       machine.succeed("sleep 2") # Give it a moment to bind
 
       # Start the agent service via systemctl
-      machine.succeed("systemctl start authn-scope-agent.service")
+      machine.succeed("systemctl start hyper-svid-agent.service")
 
       # Start the workload service and verify the Workload API dynamically issued credentials and rotation
       with subtest("-- workload api test --"):
-          machine.wait_for_file("/run/authn-scope/workload.sock")
+          machine.wait_for_file("/run/hyper-svid/workload.sock")
           machine.succeed("systemctl start service-a.service")
 
           # Wait for the credentials to be written to /tmp by the workload
@@ -137,11 +137,11 @@ in
       # Verify service-b and service-c using UNIX-only selectors
       print("\n\n")
       with subtest("-- service b and c verification --"):
-          machine.succeed("sudo -u service-b env USER=service-b workload-test-workload /run/authn-scope/workload.sock")
+          machine.succeed("sudo -u service-b env USER=service-b workload-test-workload /run/hyper-svid/workload.sock")
           cert_b = machine.succeed("openssl x509 -in /tmp/workload-cert-service-b.pem -noout -text")
           assert "CN=service-b" in cert_b
 
-          machine.succeed("sudo -u service-c env USER=service-c workload-test-workload /run/authn-scope/workload.sock")
+          machine.succeed("sudo -u service-c env USER=service-c workload-test-workload /run/hyper-svid/workload.sock")
           cert_c = machine.succeed("openssl x509 -in /tmp/workload-cert-service-c.pem -noout -text")
           assert "CN=service-c" in cert_c
           print("\033[94m" + "-- service b and c verification completed successfully --" + "\033[0m")
@@ -149,35 +149,35 @@ in
       # Evaluate service-a's identity using the evaluator test binary
       print("\n\n")
       with subtest("-- capability eval test(rust) --"):
-          machine.succeed("check-svid-rust /tmp/workload-cert-service-a.pem /etc/authn-scope/ca/ca-cert.pem")
+          machine.succeed("check-svid-rust /tmp/workload-cert-service-a.pem /etc/hyper-svid/ca/ca-cert.pem")
           print("\033[94m" + "-- capability eval test(rust) completed successfully --" + "\033[0m")
 
       print("\n\n")
       with subtest("-- capability eval test(go) --"):
-          machine.succeed("check-svid-go /tmp/workload-cert-service-a.pem /etc/authn-scope/ca/ca-cert.pem")
+          machine.succeed("check-svid-go /tmp/workload-cert-service-a.pem /etc/hyper-svid/ca/ca-cert.pem")
           print("\033[94m" + "-- capability eval test(go) completed successfully --" + "\033[0m")
 
       # Test CLI flags for attestation reset
       print("\n\n")
       with subtest("-- test server CLI attestation reset --"):
-          machine.succeed("authn-scope-server --reset-attestation local-vm")
+          machine.succeed("hyper-svid-server --reset-attestation local-vm")
           print("\033[94m" + "-- attestation reset CLI verified successfully --" + "\033[0m")
 
       # Test server time sync notification signal and certificate rotation
       print("\n\n")
       with subtest("-- test server time sync notification & cert rotation --"):
-          server_pid = machine.succeed("systemctl show --property=MainPID --value authn-scope-server.service").strip()
+          server_pid = machine.succeed("systemctl show --property=MainPID --value hyper-svid-server.service").strip()
           machine.succeed(f"kill -USR1 {server_pid}")
           machine.succeed("sleep 2")
-          agent_log = machine.succeed("journalctl -u authn-scope-agent.service")
+          agent_log = machine.succeed("journalctl -u hyper-svid-agent.service")
           assert "TimeSyncNotification" in agent_log or "Proactively requesting rotated certificate" in agent_log
           print("\033[94m" + "-- time sync notification & rotation test completed successfully --" + "\033[0m")
 
       print("\n\n")
-      with subtest("-- get status of auth scope server --"):
-        status = machine.succeed("systemctl status authn-scope-server.service")
+      with subtest("-- get status of hyper-svid server --"):
+        status = machine.succeed("systemctl status hyper-svid-server.service")
         print(status)
-        print("\033[94m" + "-- status of auth scope server retrieved successfully --" + "\033[0m")
+        print("\033[94m" + "-- status of hyper-svid server retrieved successfully --" + "\033[0m")
 
       print("\n\n")
     '';

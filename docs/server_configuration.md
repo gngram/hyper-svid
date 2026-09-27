@@ -1,6 +1,6 @@
-# VM-AuthN-Scope Host Server Configuration Reference
+# Hyper-SVID Host Server Configuration Reference
 
-This document describes the configuration options for the **VM-AuthN-Scope Host Server** (`authn-scope-server`). The configuration is stored as JSON (default location `/etc/authn-scope/host.json`).
+This document describes the configuration options for the **Hyper-SVID Host Server** (`hyper-svid-server`). The configuration is stored as JSON (default location `/etc/hyper-svid/host.json`).
 
 ## Configuration Options
 
@@ -64,14 +64,14 @@ Each entry under `vms` represents a guest VM.
 ## CLI Options
 
 ```bash
-# Start server using default /etc/authn-scope/host.json
-sudo authn-scope-server
+# Start server using default /etc/hyper-svid/host.json
+sudo hyper-svid-server
 
 # Start server with custom config and generate new CA keys
-sudo authn-scope-server --config /path/to/host.json --genkey
+sudo hyper-svid-server --config /path/to/host.json --genkey
 
 # Reset attestation state (TOFU) for a specific VM after image updates (automatically re-seals known_vms.json)
-sudo authn-scope-server --reset-attestation local-vm
+sudo hyper-svid-server --reset-attestation local-vm
 ```
 
 ---
@@ -82,7 +82,7 @@ sudo authn-scope-server --reset-attestation local-vm
    - When a guest VM connects, the server sends a cryptographically secure random nonce (`AttestationChallenge`).
    - The guest agent uses its vTPM Attestation Key (AK) to sign a quote over PCRs 0, 1, 2, 3, 7 and the nonce.
    - The server verifies the RSA signature and nonce in pure Rust (no host TPM dependency for verification).
-   - On the first connection, the server records the PCR digest (Trust-On-First-Use) into `/var/lib/authn-scope/known_vms.json`.
+   - On the first connection, the server records the PCR digest (Trust-On-First-Use) into `/var/lib/hyper-svid/known_vms.json`.
    - On subsequent connections, the quote must match the recorded digest. If the guest firmware or bootloader was tampered with, attestation fails and the handshake is rejected.
 2. **Host TPM Sealing of TOFU State (`known_vms.json`)**:
    - Whenever `known_vms.json` is updated or learned, its SHA-256 hash is sealed into the host's own TPM (`known_vms_seal.json`).
@@ -108,6 +108,6 @@ sudo authn-scope-server --reset-attestation local-vm
 
 **References**
 * Sample host configuration – `config-examples/host.json`.
-* Wire protocol – `libs/rust-libs/authn-scope-proto/src/wire.rs`.
-* Agent implementation – `apps/rust-apps/authn-scope-agent/src/client.rs`.
-* TPM library – `libs/rust-libs/authn-scope-tpm/src/lib.rs`.
+* Wire protocol – `libs/rust-libs/hyper-svid-proto/src/wire.rs`.
+* Agent implementation – `apps/rust-apps/hyper-svid-agent/src/client.rs`.
+* TPM library – `libs/rust-libs/hyper-svid-tpm/src/lib.rs`.
